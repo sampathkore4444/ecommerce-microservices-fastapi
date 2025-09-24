@@ -1,0 +1,38 @@
+Complete Folder Structure with All Services
+
+ecommerce-microservices/
+├── shared/
+│   ├── __init__.py
+│   └── schemas.py
+├── user_service/
+│   ├── models/
+│   ├── routers/
+│   ├── dependencies.py
+│   ├── database.py
+│   ├── main.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── product_service/
+│   ├── models/
+│   ├── routers/ 
+│   ├── dependencies.py
+│   ├── database.py
+│   ├── main.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── order_service/
+│   ├── models/
+│   ├── routers/
+│   ├── dependencies.py
+│   ├── database.py
+│   ├── main.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── api_gateway/
+│   ├── dependencies.py
+│   ├── main.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── docker-compose.yml
+├── .env
+└── requirements.txt
