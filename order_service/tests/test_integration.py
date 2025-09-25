@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from order_service.models import OrderStatus
+from models import Order
 
 
 class TestOrderServiceIntegration:

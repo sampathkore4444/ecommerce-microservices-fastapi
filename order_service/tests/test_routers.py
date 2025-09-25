@@ -1,5 +1,6 @@
 import pytest
 from order_service.models import OrderStatus
+from models import Order
 
 
 class TestOrderRoutes:
