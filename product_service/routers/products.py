@@ -9,12 +9,16 @@ from ..models import Product
 from shared.schemas import ProductCreate, ProductResponse, ProductUpdate
 
 from dependencies import get_product_or_404
+from ..event_handlers import publish_product_updated
+
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
+# 🔄 REST API ENDPOINTS
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
+    """REST API: Create product"""
     product_id = str(uuid.uuid4())
 
     db_product = Product(
@@ -40,6 +44,7 @@ async def get_products(
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
+    """REST API: Get products"""
     query = db.query(Product)
 
     if category:
@@ -69,6 +74,9 @@ async def update_product(
     db.commit()
     db.refresh(product)
 
+    # 🎯 MESSAGE QUEUE: Publish product update event
+    await publish_product_updated(product.__dict__)
+
     return product
 
 
@@ -85,14 +93,19 @@ async def get_product_stock(product: Product = Depends(get_product_or_404)):
     return {"product_id": product.id, "stock": product.stock}
 
 
+# @router.patch("/{product_id}/stock", response_model=ProductResponse)
 @router.patch("/{product_id}/stock", response_model=ProductResponse)
-async def update_product_stock(
-    stock_update: dict,
+async def update_stock(
+    product_id: str,
+    stock_data: dict,
     product: Product = Depends(get_product_or_404),
     db: Session = Depends(get_db),
 ):
-    product.stock = stock_update.get("stock", product.stock)
-    product.updated_at = datetime.utcnow()
+    product.stock = stock_data.get("stock", product.stock)
+    product.updated_at = datetime.now()
     db.commit()
     db.refresh(product)
+
+    # 🎯 MESSAGE QUEUE: Publish inventory update
+    await publish_product_updated({"product_id": product_id, "stock": new_stock})
     return product

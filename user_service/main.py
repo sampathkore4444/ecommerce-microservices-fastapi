@@ -1,88 +1,3 @@
-# In-memory database
-# users_db = {}
-
-
-# Models
-# class UserCreate(BaseModel):
-#     username: str
-#     password: str
-#     full_name: str
-#     email: str
-
-
-# class UserResponse(BaseModel):
-#     id: str
-#     username: str
-#     full_name: str
-#     email: str
-#     created_at: datetime
-
-
-# class UserUpdate(BaseModel):
-#     email: Optional[str] = None
-#     full_name: Optional[str] = None
-
-
-# # Routes
-# @app.post("/users/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-# async def create_user(user: UserCreate, db: Session = Depends(get_db)):
-#     # Check if user exists
-
-#     user_id = str(uuid.uuid4())
-
-#     user_data = {
-#         "id": user_id,
-#         "username": user.username,
-#         "full_name": user.full_name,
-#         "email": user.email,
-#         "password": user.password,
-#         "created_at": datetime.now(),
-#     }
-
-#     # Save to database
-#     users_db[user_id] = user_data
-
-#     return user_data
-
-
-# @app.get("/users/", response_model=List[UserResponse])
-# async def get_all_users():
-#     print(f"Database contents: {users_db}")  # See everything
-#     print(f"Keys: {list(users_db.keys())}")  # See just keys
-#     return list(users_db.values())
-
-
-# @app.get("/users/{user_id}", response_model=UserResponse)
-# async def get_user(user_id: str):
-#     if user_id not in users_db:
-#         return HTTPException(status_code=404, detail="User does not exist")
-#     else:
-#         return users_db[user_id]
-
-
-# @app.put("/users/{user_id}", response_model=UserResponse)
-# async def update_user(user_id: str, user_update: UserUpdate):
-#     if user_id not in users_db:
-#         return HTTPException(status_code=404, detail="User does not exist")
-#     else:
-#         user_data = users_db[user_id]
-#         print("user_data====", user_data)
-
-#         print("user_update.email====", user_update.email)
-#         print("user_update.full_name====", user_update.full_name)
-
-#         if user_update.email is not None:
-#             user_data["email"] = user_update.email
-
-#         if user_update.full_name is not None:
-#             user_data["full_name"] = user_update.full_name
-
-#         # Save back to database
-#         users_db[user_id] = user_data
-
-#         return user_data
-
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -92,9 +7,31 @@ from routers import auth, users
 
 from monitoring import monitor_app
 
+from contextlib import asynccontextmanager
+import asyncio
+from .event_handlers import message_queue, handle_order_events, MessageType
+
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to message queue
+    await message_queue.connect()
+
+    # Start consuming order events for user analytics
+    order_task = asyncio.create_task(
+        message_queue.consume_messages(MessageType.ORDER_CREATED, handle_order_events)
+    )
+
+    yield
+
+    # Shutdown: Close connections
+    order_task.cancel()
+    await message_queue.close()
+
 
 app = FastAPI(
     title="User Service",

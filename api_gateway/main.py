@@ -1,141 +1,3 @@
-# from fastapi import FastAPI, HTTPException
-# from fastapi.middleware.cors import CORSMiddleware
-# from typing import Optional, List
-# from pydantic import BaseModel
-# import httpx
-
-# # Import from shared package
-# from shared.schemas import UserCreate, UserResponse
-# from shared.schemas import ProductCreate, ProductResponse, ProductUpdate
-# from shared.schemas import OrderCreate, OrderResponse, OrderStatus
-
-# app = FastAPI(
-#     title="API Gateway",
-#     version="1.0.0",
-#     description="Single entry point for all e-commerce microservices",
-# )
-
-# # CORS middleware
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# # Service URLs
-# USER_SERVICE_URL = "http://localhost:8001"
-# PRODUCT_SERVICE_URL = "http://localhost:8002"
-# ORDER_SERVICE_URL = "http://localhost:8003"
-
-
-# # User Service Routes
-# @app.post("/users/")
-# async def create_user(user_data: UserCreate):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.post(f"{USER_SERVICE_URL}/users/", json=user_data)
-#         return response.json()
-
-
-# @app.get("/users/{user_id}")
-# async def get_user(user_id: str):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{USER_SERVICE_URL}/users/{user_id}")
-#         return response.json()
-
-
-# @app.get("/users/", response_model=List[UserResponse])
-# async def get_users():
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{USER_SERVICE_URL}/users/")
-#         return response.json()
-
-
-# # Product Service Routes
-# @app.post("/products/")
-# async def create_product(product_data: ProductCreate):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.post(
-#             f"{PRODUCT_SERVICE_URL}/products/", json=product_data
-#         )
-#         return response.json()
-
-
-# @app.get("/products/{product_id}")
-# async def get_product(product_id: str):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{PRODUCT_SERVICE_URL}/products/{product_id}")
-#         return response.json()
-
-
-# @app.get("/products/", response_model=List[ProductResponse])
-# async def get_products():
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{PRODUCT_SERVICE_URL}/products/")
-#         return response.json()
-
-
-# @app.put("/products/{product_id}", response_model=ProductResponse)
-# async def update_product(product_id: str, product_data: ProductUpdate):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.put(
-#             f"{PRODUCT_SERVICE_URL}/products/{product_id}", json=product_data
-#         )
-#         return response.json()
-
-
-# @app.delete("/products/{product_id}")
-# async def delete_product(product_id: str):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.delete(f"{PRODUCT_SERVICE_URL}/products/{product_id}")
-#         return response.json()
-
-
-# # Order Service Routes
-# @app.post("/orders/", response_model=OrderResponse)
-# async def create_order(order_data: OrderCreate):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.post(f"{ORDER_SERVICE_URL}/orders/", json=order_data)
-#         return response.json()
-
-
-# @app.get("/orders/{order_id}")
-# async def get_order(order_id: str):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{ORDER_SERVICE_URL}/orders/{order_id}")
-#         return response.json()
-
-
-# @app.get("/orders/", response_model=List[OrderResponse])
-# async def get_orders():
-#     async with httpx.AsyncClient() as client:
-#         response = await client.get(f"{ORDER_SERVICE_URL}/orders/")
-#         return response.json()
-
-
-# @app.put("/orders/{order_id}")
-# async def update_order(order_id: str, order_data: dict):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.put(
-#             f"{ORDER_SERVICE_URL}/orders/{order_id}", json=order_data
-#         )
-#         return response.json()
-
-
-# @app.delete("/orders/{order_id}")
-# async def delete_order(order_id: str):
-#     async with httpx.AsyncClient() as client:
-#         response = await client.delete(f"{ORDER_SERVICE_URL}/orders/{order_id}")
-#         return response.json()
-
-
-# if __name__ == "__main__":
-#     import uvicorn
-
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -187,7 +49,10 @@ app.add_middleware(
 monitor_app(app, "api_gateway")
 
 
-async def handle_service_response(response: httpx.Response):
+async def handle_service_response(response: httpx.Response, service: str):
+    """Handle responses from downstream services with monitoring"""
+    track_downstream_request(service, response.status_code)
+
     if response.status_code == 404:
         raise HTTPException(status_code=404, detail="Resource not found")
     elif response.status_code >= 500:
@@ -312,6 +177,10 @@ async def cached_request(method: str, url: str, cache_ttl: int = 300, **kwargs):
         return response
 
 
+# API Gateway only handles synchronous REST API routing
+# It doesn't use message queue directly for client requests
+
+
 # User Service Routes with caching
 @app.post("/users/", response_model=UserResponse)
 async def create_user(user: UserCreate):
@@ -361,7 +230,7 @@ async def create_product(
         response = await client.post(
             f"{PRODUCT_SERVICE_URL}/products/", json=product.dict()
         )
-        return await handle_service_response(response)
+        return await handle_service_response(response, "product_service")
 
 
 @app.get("/products/", response_model=list[ProductResponse])
@@ -375,7 +244,7 @@ async def get_products(category: str = None, skip: int = 0, limit: int = 100):
     response = await cached_request(
         "GET", f"{PRODUCT_SERVICE_URL}/products/", cache_ttl=60, params=params
     )
-    return await handle_service_response(response)
+    return await handle_service_response(response, "product_service")
 
 
 @app.get("/products/{product_id}", response_model=ProductResponse)
@@ -385,7 +254,7 @@ async def get_product(product_id: str):
     response = await cached_request(
         "GET", f"{PRODUCT_SERVICE_URL}/products/{product_id}", cache_ttl=300
     )
-    return await handle_service_response(response)
+    return await handle_service_response(response, "product_service")
 
 
 # Order Service Routes
@@ -393,7 +262,9 @@ async def get_product(product_id: str):
 async def create_order(order: OrderCreate, current_user: dict = Depends(verify_token)):
     async with httpx.AsyncClient() as client:
         response = await client.post(f"{ORDER_SERVICE_URL}/orders/", json=order.dict())
-        return await handle_service_response(response)
+
+        # This triggers the Order Service REST API, which then publishes message queue events
+        return await handle_service_response(response, "order_service")
 
 
 @app.get("/orders/", response_model=list[OrderResponse])
@@ -404,14 +275,14 @@ async def get_orders(user_id: str = None, current_user: dict = Depends(verify_to
             params["user_id"] = user_id
 
         response = await client.get(f"{ORDER_SERVICE_URL}/orders/", params=params)
-        return await handle_service_response(response)
+        return await handle_service_response(response, "order_service")
 
 
 @app.get("/orders/{order_id}", response_model=OrderResponse)
 async def get_order(order_id: str, current_user: dict = Depends(verify_token)):
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{ORDER_SERVICE_URL}/orders/{order_id}")
-        return await handle_service_response(response)
+        return await handle_service_response(response, "order_service")
 
 
 @app.patch("/orders/{order_id}/status", response_model=OrderResponse)
@@ -422,7 +293,7 @@ async def update_order_status(
         response = await client.patch(
             f"{ORDER_SERVICE_URL}/orders/{order_id}/status", json=status
         )
-        return await handle_service_response(response)
+        return await handle_service_response(response, "order_service")
 
 
 # Cache management endpoints
