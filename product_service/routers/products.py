@@ -101,11 +101,13 @@ async def update_stock(
     product: Product = Depends(get_product_or_404),
     db: Session = Depends(get_db),
 ):
-    product.stock = stock_data.get("stock", product.stock)
-    product.updated_at = datetime.now()
-    db.commit()
-    db.refresh(product)
+    new_stock = stock_data.get("stock")
+    if new_stock is not None:
+        product.stock = stock_data.get("stock", product.stock)
+        product.updated_at = datetime.now()
+        db.commit()
+        db.refresh(product)
 
-    # 🎯 MESSAGE QUEUE: Publish inventory update
-    await publish_product_updated({"product_id": product_id, "stock": new_stock})
+        # 🎯 MESSAGE QUEUE: Publish inventory update
+        await publish_product_updated({"product_id": product_id, "stock": new_stock})
     return product
