@@ -37,6 +37,7 @@ app = FastAPI(
     title="User Service",
     version="1.0.0",
     description="User management and authentication service",
+    lifespan=lifespan,
 )
 
 # CORS middleware

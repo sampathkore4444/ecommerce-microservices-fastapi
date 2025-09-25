@@ -4,11 +4,14 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime
 
+
 from .database import Base, engine
 from .routers import products
 
 from monitoring import monitor_app, track_product_creation, track_product_update
 
+from contextlib import asynccontextmanager
+import asyncio
 from .event_handlers import (
     message_queue,
     handle_order_created,
@@ -23,10 +26,36 @@ load_dotenv()
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to message queue
+    await message_queue.connect()
+
+    # Start consuming order events
+    order_created_task = asyncio.create_task(
+        message_queue.consume_messages(MessageType.ORDER_CREATED, handle_order_created)
+    )
+
+    order_cancelled_task = asyncio.create_task(
+        message_queue.consume_messages(
+            MessageType.ORDER_CANCELLED, handle_order_cancelled
+        )
+    )
+
+    yield
+
+    # Shutdown: Close connections
+    order_created_task.cancel()
+    order_cancelled_task.cancel()
+    await message_queue.close()
+
+
 app = FastAPI(
     title="Product Service",
     version="1.0.0",
     description="Product catalog management service",
+    lifespan=lifespan,
 )
 
 # CORS middleware

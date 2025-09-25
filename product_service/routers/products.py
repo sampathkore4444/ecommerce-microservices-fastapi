@@ -34,7 +34,7 @@ async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_product)
 
-    return db_product
+    return db_product  # FastAPI automatically converts to ProductResponse
 
 
 @router.get("/", response_model=List[ProductResponse])
@@ -51,7 +51,7 @@ async def get_products(
         query = query.filter(Product.category == category)
 
     products = query.offset(skip).limit(limit).all()
-    return products
+    return products  # FastAPI automatically converts to ProductResponse
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -77,7 +77,7 @@ async def update_product(
     # 🎯 MESSAGE QUEUE: Publish product update event
     await publish_product_updated(product.__dict__)
 
-    return product
+    return product  # FastAPI automatically converts to ProductResponse
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -110,4 +110,4 @@ async def update_stock(
 
         # 🎯 MESSAGE QUEUE: Publish inventory update
         await publish_product_updated({"product_id": product_id, "stock": new_stock})
-    return product
+    return product  # FastAPI automatically converts to ProductResponse
